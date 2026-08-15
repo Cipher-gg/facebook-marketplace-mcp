@@ -9,9 +9,29 @@ Direct GraphQL API replay (no browser at runtime). Speaks Facebook's internal `/
 - `src/facebook/auth.ts` — Chrome cookie extraction (SQLite + Keychain decrypt)
 - `src/facebook/queries.ts` — Known `doc_id` values for Marketplace GraphQL operations
 - `src/facebook/parser.ts` — Response normalization for search results and listing details
-- `src/tools/` — MCP tool handlers (search, listing, monitor)
+- `src/tools/` — MCP tool handlers (search, listing, monitor, vehicles)
 - `src/storage/monitors.ts` — JSON file persistence for saved search monitors (~/.fb-marketplace/)
+- `src/storage/db.ts` — SQLite handle + schema migration for the car database
+- `src/storage/listings.ts` — listing upsert, queries, KBB valuation scoring
+- `src/vehicles/parse.ts` — year/make/model/trim/mileage extraction from listing text
+- `.claude/skills/` — car-scan → car-record → car-value, the daily routine
 - `scripts/capture-queries.ts` — Playwright-based script to discover new GraphQL doc_ids
+- `scripts/morning-car-scan.sh` + `com.user.car-scan.plist` — daily LaunchAgent
+
+## Car Database
+SQLite at `~/.fb-marketplace/cars.db` (`FB_MARKETPLACE_DB` overrides). Tables:
+`listings`, `listing_photos`, `valuations`, `scan_runs`. Migration is idempotent
+`CREATE TABLE IF NOT EXISTS` on open — additive changes only, no migration
+framework.
+
+`check_monitors` and `get_listing` write to it as a side effect. New rows are
+inserted; known listings get price/pending refreshed so price drops surface.
+Detail fields merge with `COALESCE`, so a later fetch never blanks an earlier
+one. The database — not `monitors.json` `seenIds` — decides what counts as new.
+
+Deal scoring: `pct_under = (kbb_value - ask) / kbb_value * 100`, flagged at
+`DEAL_THRESHOLD_PCT` (default 15). KBB values are supplied by the agent from
+kbb.com lookups; there is no API and nothing auto-fetches them.
 
 ## Fragility Points
 - `doc_id` values change when Facebook deploys (use capture-queries script to update)

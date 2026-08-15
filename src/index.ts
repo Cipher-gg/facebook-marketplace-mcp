@@ -19,6 +19,14 @@ import {
   createDeleteMonitorHandler,
   createListMonitorsHandler,
 } from "./tools/monitor.js";
+import {
+  queryListingsSchema,
+  recordValuationSchema,
+  dbStatsSchema,
+  createQueryListingsHandler,
+  createRecordValuationHandler,
+  createDbStatsHandler,
+} from "./tools/vehicles.js";
 
 const client = new FacebookClient({
   maxRequestsPerMinute: 3,
@@ -84,6 +92,30 @@ server.tool(
   "List all saved search monitors",
   listMonitorsSchema,
   createListMonitorsHandler()
+);
+
+// Query the saved car database
+server.tool(
+  "query_listings",
+  "Query saved car listings from the local database, with filters for listings needing detail fetch, needing KBB valuation, or flagged as deals",
+  queryListingsSchema,
+  createQueryListingsHandler()
+);
+
+// Record a KBB private party value
+server.tool(
+  "record_valuation",
+  "Record a Kelley Blue Book private party value for a saved listing and flag it if the asking price is far enough under",
+  recordValuationSchema,
+  createRecordValuationHandler()
+);
+
+// Database summary
+server.tool(
+  "db_stats",
+  "Summarize the car database: totals, listings awaiting details or valuation, and flagged deals",
+  dbStatsSchema,
+  createDbStatsHandler()
 );
 
 // Start the server

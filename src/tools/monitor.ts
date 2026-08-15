@@ -7,6 +7,7 @@ import {
   updateMonitorSeenIds,
   deleteMonitor,
 } from "../storage/monitors.js";
+import { saveSearchListings, recordScanRun } from "../storage/listings.js";
 
 export const monitorSearchSchema = {
   name: z.string().describe("Name for this saved search monitor"),
@@ -102,30 +103,53 @@ export function createCheckMonitorsHandler(client: FacebookClient) {
       for (const monitor of monitors) {
         if (!monitor) continue;
 
-        const searchResult = await client.searchListings(monitor.params);
-        const newListings = searchResult.listings.filter(
-          (l) => !monitor.seenIds.includes(l.id)
+        let searchResult;
+        try {
+          searchResult = await client.searchListings(monitor.params);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          recordScanRun(monitor.name, 0, 0, message);
+          results.push(`### ⚠️ ${monitor.name} — search failed: ${message}`);
+          continue;
+        }
+
+        // Persist every result: new rows get inserted, known ones get their
+        // price and pending status refreshed. The database is the source of
+        // truth for what counts as new.
+        const saved = saveSearchListings(searchResult.listings, monitor.name);
+        const newIds = new Set(
+          saved.filter((s) => s.isNew).map((s) => s.id)
+        );
+        const newListings = searchResult.listings.filter((l) =>
+          newIds.has(l.id)
+        );
+
+        updateMonitorSeenIds(
+          monitor.name,
+          searchResult.listings.map((l) => l.id)
+        );
+        recordScanRun(
+          monitor.name,
+          searchResult.listings.length,
+          newListings.length
         );
 
         if (newListings.length > 0) {
-          updateMonitorSeenIds(
-            monitor.name,
-            newListings.map((l) => l.id)
-          );
-
           const listingSummary = newListings
             .map(
               (l, i) =>
-                `  ${i + 1}. **${l.title}** — ${l.price}\n     📍 ${l.location}\n     🔗 ${l.url}`
+                `  ${i + 1}. **${l.title}** — ${l.price}\n     📍 ${l.location}\n     🆔 \`${l.id}\`\n     🔗 ${l.url}`
             )
             .join("\n\n");
 
           results.push(
-            `### 🔔 ${monitor.name} — ${newListings.length} new listing(s)\n\n${listingSummary}`
+            `### 🔔 ${monitor.name} — ${newListings.length} new listing(s), saved to database\n\n${listingSummary}`
           );
         } else {
-          updateMonitorSeenIds(monitor.name, []);
-          results.push(`### ${monitor.name} — no new listings`);
+          results.push(
+            `### ${monitor.name} — no new listings (${searchResult.listings.length} checked)`
+          );
         }
       }
 

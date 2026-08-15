@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd job for the daily Marketplace car sweep.
+
+  Install:
+    1. Edit ProgramArguments below to your real checkout path.
+    2. cp scripts/com.user.car-scan.plist ~/Library/LaunchAgents/
+    3. launchctl load ~/Library/LaunchAgents/com.user.car-scan.plist
+
+  A LaunchAgent (not a LaunchDaemon) is required: the job needs your login
+  keychain to decrypt Chrome's cookies, and that is only unlocked when you are
+  logged in. If the Mac is asleep at 07:30, launchd runs the job at the next
+  wake.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.user.car-scan</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/CHANGEME/facebook-marketplace-mcp/scripts/morning-car-scan.sh</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>7</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/car-scan.err</string>
+</dict>
+</plist>
