@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
 import { execSync } from "node:child_process";
 import path from "node:path";
 import os from "node:os";
@@ -67,12 +68,31 @@ function decryptCookieValue(encrypted: Buffer, key: Buffer): string {
   return decoded.toString("utf8");
 }
 
-function getCookieDbPath(profile = "Default"): string {
-  return path.join(
+function cookieDbCandidates(profile = "Default"): string[] {
+  const base = path.join(
     os.homedir(),
     "Library/Application Support/Google/Chrome",
-    profile,
-    "Cookies"
+    profile
+  );
+  return [
+    // Chrome 96+ moved the cookie DB down a level.
+    path.join(base, "Network", "Cookies"),
+    // Pre-96 layout, still present on old profiles.
+    path.join(base, "Cookies"),
+  ];
+}
+
+function getCookieDbPath(profile = "Default"): string {
+  const candidates = cookieDbCandidates(profile);
+  const found = candidates.find((c) => fs.existsSync(c));
+  if (found) return found;
+
+  throw new Error(
+    `No Chrome cookie database for profile "${profile}". Looked in:\n` +
+      candidates.map((c) => `  ${c}`).join("\n") +
+      "\nCheck that Chrome is installed and that the profile name is right " +
+      "(set CHROME_PROFILE if your Facebook login lives in another profile). " +
+      "Run scripts/doctor.sh to list the profiles that have a Facebook session."
   );
 }
 
@@ -90,8 +110,9 @@ export function extractChromeCookies(
     });
   } catch {
     throw new Error(
-      `Failed to copy Chrome cookie DB from ${cookiePath}. ` +
-        "Make sure Chrome is installed and the profile exists."
+      `Failed to copy the Chrome cookie DB from ${cookiePath}. ` +
+        "The file exists but could not be read — if Chrome is mid-write, " +
+        "retry in a moment."
     );
   }
 
