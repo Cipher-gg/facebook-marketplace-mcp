@@ -12,7 +12,7 @@ Facebook's web client makes all Marketplace requests as `POST /api/graphql/` wit
 
 - **macOS** (cookie extraction uses Keychain)
 - **Google Chrome** with an active Facebook login
-- **Node.js** 20+
+- **Node.js** 22+
 
 ## Installation
 
@@ -21,7 +21,14 @@ git clone <this-repo>
 cd facebook-marketplace-mcp
 npm install
 npm run build
+./scripts/doctor.sh   # checks the whole install and names any fix needed
 ```
+
+`better-sqlite3` compiles a native module on install. It needs Xcode command
+line tools (`xcode-select --install`) and a version that supports your Node —
+v13 covers Node 22 through 26. On a Node newer than the pinned dependency
+supports, the install fails with V8 compile errors like `no member named
+'GetPrototype'`; bumping `better-sqlite3` is the fix, not downgrading Node.
 
 ## Setup with Claude Code
 

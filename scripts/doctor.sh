@@ -28,10 +28,10 @@ fi
 
 if command -v node >/dev/null 2>&1; then
   node_major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
-  if [ "$node_major" -ge 20 ] 2>/dev/null; then
+  if [ "$node_major" -ge 22 ] 2>/dev/null; then
     ok "Node $(node --version)"
   else
-    bad "Node $(node --version) is too old (need 20+)"
+    bad "Node $(node --version) is too old (need 22+)"
     fix "brew install node   # or: brew upgrade node"
   fi
 else
