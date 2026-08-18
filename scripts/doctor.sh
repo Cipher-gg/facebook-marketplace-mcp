@@ -78,34 +78,65 @@ head_ "Chrome session"
 if [ -d "$CHROME_DIR" ]; then
   ok "Chrome profile directory found"
 
-  profiles_with_fb=""
-  while IFS= read -r cookie_db; do
-    [ -f "$cookie_db" ] || continue
-    profile="$(basename "$(dirname "$cookie_db")")"
-    tmp="$(mktemp)"
-    if cp "$cookie_db" "$tmp" 2>/dev/null; then
-      n=$(sqlite3 "$tmp" \
-        "SELECT COUNT(*) FROM cookies WHERE host_key LIKE '%facebook.com' AND name='c_user';" \
-        2>/dev/null || echo 0)
-      if [ "${n:-0}" -gt 0 ]; then
-        ok "Facebook login found in profile: $profile"
-        profiles_with_fb="$profiles_with_fb $profile"
-      else
-        warn "No Facebook login in profile: $profile"
-      fi
-    fi
-    rm -f "$tmp"
-  done < <(find "$CHROME_DIR" -maxdepth 3 -name Cookies -type f 2>/dev/null)
+  # Chrome 96+ keeps cookies at <profile>/Network/Cookies; older builds put it
+  # at <profile>/Cookies. Search deep enough to catch both.
+  cookie_dbs="$(find "$CHROME_DIR" -maxdepth 3 -name Cookies -type f 2>/dev/null)"
 
-  if [ -z "$profiles_with_fb" ]; then
-    bad "No Chrome profile has a Facebook session"
-    fix "Open Chrome, log into facebook.com, then rerun this script"
+  if ! command -v sqlite3 >/dev/null 2>&1; then
+    # Without sqlite3 every profile would look empty, which reads as "not
+    # logged in" and sends you to log in again for no reason.
+    bad "sqlite3 not found — cannot inspect Chrome cookies, results would be misleading"
+    fix "macOS ships it at /usr/bin/sqlite3 — check your PATH"
+  elif [ -z "$cookie_dbs" ]; then
+    bad "Chrome has run, but no cookie database exists yet"
+    fix "Open Chrome, go to facebook.com and log in"
+    fix "Then QUIT Chrome (cmd-Q) so it flushes cookies to disk, and rerun this"
+    fix "Searched: $CHROME_DIR/*/Cookies and $CHROME_DIR/*/Network/Cookies"
   else
-    # shellcheck disable=SC2086
-    set -- $profiles_with_fb
-    if [ "$1" != "Default" ]; then
-      warn "Facebook lives in '$1', not 'Default' — the server needs to be told"
-      fix "claude mcp add facebook-marketplace --env CHROME_PROFILE='$1' -- node '$REPO_DIR/dist/index.js'"
+    profiles_with_fb=""
+    while IFS= read -r cookie_db; do
+      [ -f "$cookie_db" ] || continue
+
+      dir="$(dirname "$cookie_db")"
+      # Step out of Network/ so the profile is reported as "Default", not
+      # "Network" — CHROME_PROFILE expects the profile directory name.
+      [ "$(basename "$dir")" = "Network" ] && dir="$(dirname "$dir")"
+      profile="$(basename "$dir")"
+
+      tmp="$(mktemp)"
+      if cp "$cookie_db" "$tmp" 2>/dev/null; then
+        fb_all=$(sqlite3 "$tmp" \
+          "SELECT COUNT(*) FROM cookies WHERE host_key LIKE '%facebook.com';" \
+          2>/dev/null || echo 0)
+        fb_user=$(sqlite3 "$tmp" \
+          "SELECT COUNT(*) FROM cookies WHERE host_key LIKE '%facebook.com' AND name='c_user';" \
+          2>/dev/null || echo 0)
+
+        if [ "${fb_user:-0}" -gt 0 ]; then
+          ok "Facebook login found in profile: $profile"
+          profiles_with_fb="$profiles_with_fb $profile"
+        elif [ "${fb_all:-0}" -gt 0 ]; then
+          warn "Profile '$profile' has $fb_all facebook.com cookies but no c_user"
+          fix "That means Facebook was visited but not logged in — log in, quit Chrome, rerun"
+        else
+          warn "Profile '$profile' has no facebook.com cookies"
+        fi
+      else
+        warn "Could not read the cookie DB for profile '$profile'"
+      fi
+      rm -f "$tmp"
+    done < <(printf '%s\n' "$cookie_dbs")
+
+    if [ -z "$profiles_with_fb" ]; then
+      bad "No Chrome profile has a Facebook session"
+      fix "Log into facebook.com in Chrome, quit Chrome, then rerun this script"
+    else
+      # shellcheck disable=SC2086
+      set -- $profiles_with_fb
+      if [ "$1" != "Default" ]; then
+        warn "Facebook lives in '$1', not 'Default' — the server needs to be told"
+        fix "claude mcp add facebook-marketplace --env CHROME_PROFILE='$1' -- node '$REPO_DIR/dist/index.js'"
+      fi
     fi
   fi
 else
