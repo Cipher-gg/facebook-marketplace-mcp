@@ -114,7 +114,11 @@ else
 fi
 
 if [ "$(uname -s)" = "Darwin" ]; then
-  if security find-generic-password -s "Chrome Safe Storage" -a "Chrome" >/dev/null 2>&1; then
+  if [ ! -d "$CHROME_DIR" ]; then
+    # Chrome creates this keychain entry on first launch. Reporting it as a
+    # failure here just sends you chasing a keychain problem you do not have.
+    warn "Keychain check skipped — Chrome creates 'Chrome Safe Storage' on first run"
+  elif security find-generic-password -s "Chrome Safe Storage" -a "Chrome" >/dev/null 2>&1; then
     ok "Keychain entry 'Chrome Safe Storage' is readable"
   else
     bad "Cannot read the Chrome Safe Storage keychain entry"
