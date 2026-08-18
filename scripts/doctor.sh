@@ -79,8 +79,25 @@ if [ -d "$CHROME_DIR" ]; then
   ok "Chrome profile directory found"
 
   # Chrome 96+ keeps cookies at <profile>/Network/Cookies; older builds put it
-  # at <profile>/Cookies. Search deep enough to catch both.
-  cookie_dbs="$(find "$CHROME_DIR" -maxdepth 3 -name Cookies -type f 2>/dev/null)"
+  # at <profile>/Cookies. Search deep enough to catch both, and keep stderr so
+  # a permission problem is not mistaken for an absent file.
+  find_err="$(mktemp)"
+  cookie_dbs="$(find "$CHROME_DIR" -maxdepth 4 -name Cookies -type f 2>"$find_err")"
+
+  if [ -s "$find_err" ] && [ -z "$cookie_dbs" ]; then
+    bad "Could not search the Chrome directory"
+    while IFS= read -r line; do fix "$line"; done < "$find_err"
+    fix "If these say 'Operation not permitted', grant your terminal Full Disk Access"
+    fix "System Settings > Privacy & Security > Full Disk Access"
+  fi
+  rm -f "$find_err"
+
+  # A Chrome that was installed but never taken through first-run setup has the
+  # top directory and the keychain entry, but no profile directory at all.
+  if [ -z "$cookie_dbs" ] && [ ! -d "$CHROME_DIR/Default" ]; then
+    warn "No '$CHROME_DIR/Default' profile directory — Chrome has not finished first-run setup"
+    fix "Open Chrome, click through the welcome screens, then load facebook.com"
+  fi
 
   if ! command -v sqlite3 >/dev/null 2>&1; then
     # Without sqlite3 every profile would look empty, which reads as "not
