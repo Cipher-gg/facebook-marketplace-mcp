@@ -122,9 +122,25 @@ if [ -d "$CHROME_DIR" ]; then
 
       tmp="$(mktemp)"
       if cp "$cookie_db" "$tmp" 2>/dev/null; then
+        # Keep sqlite3's stderr. "file is not a database" and "no such table"
+        # mean very different things, and both were previously reported as an
+        # unreadable file with no explanation.
+        sql_err="$(mktemp)"
         fb_all=$(sqlite3 "$tmp" \
           "SELECT COUNT(*) FROM cookies WHERE host_key LIKE '%facebook.com';" \
-          2>/dev/null || echo 0)
+          2>"$sql_err")
+
+        if [ -s "$sql_err" ]; then
+          bad "Cookie database for profile '$profile' could not be read"
+          while IFS= read -r line; do fix "sqlite3: $line"; done < "$sql_err"
+          fix "'file is not a database' — Chrome was mid-write; quit Chrome (cmd-Q) and rerun"
+          fix "'unable to open database file' — grant your terminal Full Disk Access"
+          fix "'no such table: cookies' — Chrome has not initialised the profile yet"
+          rm -f "$sql_err" "$tmp"
+          continue
+        fi
+        rm -f "$sql_err"
+
         fb_user=$(sqlite3 "$tmp" \
           "SELECT COUNT(*) FROM cookies WHERE host_key LIKE '%facebook.com' AND name='c_user';" \
           2>/dev/null || echo 0)
